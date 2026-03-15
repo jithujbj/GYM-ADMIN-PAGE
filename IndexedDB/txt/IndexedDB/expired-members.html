@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Expired Memberships - AR Fitness</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .back-btn {
+      background: #ff0000;
+      color: white;
+      padding: 8px 14px;
+      border-radius: 5px;
+      text-decoration: none;
+    }
+
+    #searchBar {
+      padding: 10px;
+      width: 300px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background: white;
+    }
+
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+
+    th {
+      background: #333;
+      color: white;
+      cursor: pointer;
+    }
+
+    button {
+      padding: 6px 12px;
+      margin: 2px;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      cursor: pointer;
+    }
+
+    .delete-btn {
+      background: #e60000;
+    }
+
+    .renew-btn {
+      background: #28a745;
+    }
+
+    #passwordModal, #renewModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+      text-align: center;
+    }
+
+    .modal-content input {
+      width: 80%;
+      padding: 8px;
+      margin: 10px 0;
+    }
+    a.whatsapp-btn {
+      background-color: #25D366;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 5px;
+      text-decoration: none;
+      margin-top: 5px;
+      display: inline-block;
+}
+a.whatsapp-btn:hover {
+  background-color: #1ebe5c;
+}
+
+  </style>
+</head>
+<body>
+
+<script>
+  if (localStorage.getItem("loggedIn") !== "true") {
+    window.location.href = "login.html";
+  }
+
+  const DB_NAME = 'ARFitnessDB';
+  const STORE_NAME = 'members';
+  let db;
+  let members = [];
+  let currentSort = { field: '', ascending: true };
+  let actionType = '';
+  let selectedPhone = '';
+
+  async function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'phone' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function loadMembers() {
+    db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        members = request.result;
+        renderExpiredMembers();
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function deleteMember(phone) {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(phone);
+    await tx.complete;
+    await loadMembers();
+  }
+
+  async function updateMember(updated) {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(updated);
+    await tx.complete;
+    await loadMembers();
+  }
+
+  function sortBy(field) {
+    currentSort.ascending = currentSort.field === field ? !currentSort.ascending : true;
+    currentSort.field = field;
+    renderExpiredMembers();
+  }
+
+  function renderExpiredMembers() {
+    const tbody = document.querySelector("#expiredMembersTable tbody");
+    tbody.innerHTML = "";
+    const now = new Date();
+    const search = document.getElementById("searchBar").value.toLowerCase();
+
+    let expired = members.filter((m) => new Date(m.end) < now);
+
+    if (search) {
+      expired = expired.filter(m =>
+        m.name.toLowerCase().includes(search) ||
+        m.phone.toLowerCase().includes(search)
+      );
+    }
+
+    if (currentSort.field) {
+      expired.sort((a, b) => {
+        let A = a[currentSort.field]?.toLowerCase?.() || '';
+        let B = b[currentSort.field]?.toLowerCase?.() || '';
+        return currentSort.ascending ? A.localeCompare(B) : B.localeCompare(A);
+      });
+    }
+
+    expired.forEach((m) => {
+      const photo = m.photo ? `<img src="${m.photo}" width="80" style="border-radius:5px;">` : "—";
+      tbody.innerHTML += `
+        <tr>
+          <td>${photo}</td>
+          <td>${m.name}</td>
+          <td>${m.phone}</td>
+          <td>${m.plan}</td>
+          <td>${m.start}</td>
+          <td>${m.end}</td>
+          <td>
+  <button class="delete-btn" onclick="openPasswordModal('delete', '${m.phone}')">Delete</button>
+  <button class="renew-btn" onclick="openPasswordModal('renew', '${m.phone}')">Renew</button>
+  <a href="https://wa.me/91${m.phone}?text=Hi%20${encodeURIComponent(m.name)},%20your%20AR%20Fitness%20membership%20has%20expired.%20Please%20renew%20to%20continue%20your%20fitness%20journey!" target="_blank" style="background:#25D366; color:white; padding:6px 12px; border-radius:5px; text-decoration:none; display:inline-block; margin-top:5px;">
+    WhatsApp
+  </a>
+</td>
+        </tr>
+      `;
+    });
+  }
+
+  function openPasswordModal(type, phone) {
+    actionType = type;
+    selectedPhone = phone;
+    document.getElementById("passwordInput").value = "";
+    document.getElementById("passwordModal").style.display = "flex";
+  }
+
+  function closePasswordModal() {
+    document.getElementById("passwordModal").style.display = "none";
+  }
+
+  function verifyPassword() {
+    const password = document.getElementById("passwordInput").value;
+
+    if (
+      (actionType === "delete" && password === "8217526578") ||
+      (actionType === "renew" && password === "6361882288")
+    ) {
+      closePasswordModal();
+      if (actionType === "delete") {
+        deleteMember(selectedPhone);
+      } else {
+        document.getElementById("renewModal").style.display = "flex";
+      }
+    } else {
+      alert("Incorrect password!");
+    }
+  }
+
+  function closeRenewModal() {
+    document.getElementById("renewModal").style.display = "none";
+  }
+
+  async function confirmRenew(months) {
+    const planInput = document.getElementById("renewPlan").value.trim();
+    const member = members.find(m => m.phone === selectedPhone);
+    if (!member || !planInput) return alert("Please enter a plan name");
+
+    if (!Array.isArray(member.history)) {
+      member.history = [];
+    }
+
+    member.history.push({
+      previousStart: member.start,
+      previousEnd: member.end,
+      renewedOn: new Date().toISOString().split("T")[0]
+    });
+
+    const start = new Date();
+    const end = new Date();
+    end.setMonth(end.getMonth() + months);
+    member.start = start.toISOString().split("T")[0];
+    member.end = end.toISOString().split("T")[0];
+    member.plan = planInput;
+
+    await updateMember(member);
+    closeRenewModal();
+    alert(`Membership renewed for ${months} month(s)!`);
+  }
+
+  window.onload = loadMembers;
+</script>
+
+<a href="home.html" class="back-btn">Home</a>
+<h1>Expired Members</h1>
+
+<input type="text" id="searchBar" placeholder="Search by name or phone..." oninput="renderExpiredMembers()">
+
+<table id="expiredMembersTable">
+  <thead>
+    <tr>
+      <th>Photo</th>
+      <th onclick="sortBy('name')">Name</th>
+      <th>Phone</th>
+      <th onclick="sortBy('plan')">Plan</th>
+      <th>Start Date</th>
+      <th>End Date</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<!-- Password Modal -->
+<div id="passwordModal">
+  <div class="modal-content">
+    <h3>Enter Password</h3>
+    <input type="password" id="passwordInput" placeholder="Enter password">
+    <br>
+    <button class="renew-btn" onclick="verifyPassword()">Submit</button>
+    <button class="delete-btn" onclick="closePasswordModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Renew Modal -->
+<div id="renewModal">
+  <div class="modal-content">
+    <h3>Select Renewal Duration</h3>
+    <input type="text" id="renewPlan" placeholder="Enter Plan Name" />
+    <button class="renew-btn" onclick="confirmRenew(1)">1 Month</button>
+    <button class="renew-btn" onclick="confirmRenew(3)">3 Months</button>
+    <button class="renew-btn" onclick="confirmRenew(6)">6 Months</button>
+    <button class="renew-btn" onclick="confirmRenew(12)">12 Months</button>
+    <br><br>
+    <button class="delete-btn" onclick="closeRenewModal()">Cancel</button>
+  </div>
+</div>
+
+</body>
+</html>

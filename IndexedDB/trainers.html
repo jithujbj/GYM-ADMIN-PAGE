@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AR Fitness - Trainers</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      background-position: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { margin: 0; color: #333; }
+    .header button {
+      padding: 8px 16px;
+      background: #ff3c3c;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .add-trainer {
+      margin: 20px 0;
+    }
+    .add-trainer button {
+      padding: 8px 16px;
+      background: #ff3c3c;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .add-form input {
+      display: block;
+      margin: 10px 0;
+      padding: 8px;
+      width: 100%;
+    }
+    .add-form button {
+      margin-right: 5px;
+      margin-top: 5px;
+    }
+    .trainer-list {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+    }
+    .trainer-card {
+      background: #333;
+      color: white;
+      padding: 15px;
+      border-radius: 15px;
+      width: 280px;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      transition: transform 0.2s ease;
+    }
+    .trainer-card:hover {
+      transform: translateY(-5px);
+    }
+    .trainer-card img {
+      max-width: 100px;
+      margin: 10px auto;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .trainer-card button {
+      padding: 5px 10px;
+      margin-top: 5px;
+      margin-right: 5px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .delete-btn {
+      background: #e60000;
+      color: white;
+    }
+    .resign-btn {
+      background: #ffa500;
+      color: white;
+    }
+    .badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #ffa500;
+      padding: 4px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    #photoOverlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    #photoOverlay img {
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+<script>
+if (localStorage.getItem("loggedIn") !== "true") {
+  window.location.href = "login.html";
+}
+
+let db;
+const DB_NAME = 'ARFitnessDB';
+const STORE_NAME = 'trainers';
+
+const request = indexedDB.open(DB_NAME, 1);
+request.onupgradeneeded = (e) => {
+  db = e.target.result;
+  if (!db.objectStoreNames.contains(STORE_NAME)) {
+    db.createObjectStore(STORE_NAME, { keyPath: 'phone' });
+  }
+};
+request.onsuccess = (e) => {
+  db = e.target.result;
+  renderTrainers();
+};
+
+async function saveTrainer(trainer) {
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).put(trainer);
+  return tx.complete;
+}
+
+async function getAllTrainers() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function deleteTrainer(phone) {
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(phone);
+  tx.oncomplete = renderTrainers;
+}
+
+function logout() {
+  localStorage.removeItem("loggedIn");
+  window.location.href = "login.html";
+}
+
+function goBack() {
+  window.location.href = "home.html";
+}
+
+function toggleAddForm() {
+  const form = document.getElementById('addForm');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function addTrainer() {
+  const name = document.getElementById('trainerName').value;
+  const phone = document.getElementById('trainerPhone').value;
+  const adhar = document.getElementById('trainerAdhar').value;
+  const bank = document.getElementById('trainerBank').value;
+  const photo = localStorage.getItem('capturedTrainerPhoto');
+  const started = new Date().toLocaleDateString();
+
+  if (!name || !phone || !adhar || !bank) return alert("Please fill in all fields.");
+
+  const all = await getAllTrainers();
+  if (all.some(t => t.phone === phone)) return alert("Trainer with this phone already exists.");
+
+  await saveTrainer({ name, phone, adhar, bank, photo, started, resigned: false, resignedDate: null });
+  renderTrainers();
+
+  document.getElementById('addForm').style.display = 'none';
+  document.getElementById('trainerName').value = '';
+  document.getElementById('trainerPhone').value = '';
+  document.getElementById('trainerAdhar').value = '';
+  document.getElementById('trainerBank').value = '';
+  document.getElementById('photoStatus').innerText = '';
+  localStorage.removeItem('capturedTrainerPhoto');
+}
+
+async function resignTrainer(phone) {
+  if (!confirm("Mark this trainer as Resigned?")) return;
+  const all = await getAllTrainers();
+  const trainer = all.find(t => t.phone === phone);
+  if (trainer) {
+    trainer.resigned = true;
+    trainer.resignedDate = new Date().toLocaleDateString();
+    await saveTrainer(trainer);
+    renderTrainers();
+  }
+}
+
+async function renderTrainers() {
+  const trainers = await getAllTrainers();
+  const listDiv = document.getElementById('trainerList');
+  const summaryDiv = document.getElementById('trainerSummary');
+  listDiv.innerHTML = '';
+
+  if (!trainers.length) {
+    summaryDiv.innerHTML = '';
+    listDiv.innerHTML = "<p style='color:#333;'>No trainers added yet.</p>";
+    return;
+  }
+
+  const total = trainers.length;
+  const resignedCount = trainers.filter(t => t.resigned).length;
+  const activeCount = total - resignedCount;
+  summaryDiv.innerHTML = `Total Trainers: ${total} | Active: ${activeCount} | Resigned: ${resignedCount}`;
+
+  const sorted = trainers.sort((a, b) => a.resigned - b.resigned);
+  sorted.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'trainer-card';
+    card.innerHTML = `
+      ${t.resigned ? '<div class="badge">Resigned</div>' : ''}
+      <strong>Name:</strong> ${t.name}<br>
+      <strong>Phone:</strong> ${t.phone}<br>
+      <strong>Aadhar:</strong> ${t.adhar}<br>
+      <strong>Bank/UPI:</strong> ${t.bank}<br>
+      <strong>Started:</strong> ${t.started}<br>
+      ${t.resigned ? `<strong>Resigned:</strong> ${t.resignedDate}<br>` : ''}
+      ${t.photo ? `<img src="${t.photo}" onclick="openOverlay('${t.photo}')" />` : ''}<br>
+      <button class="delete-btn" onclick="deleteTrainer('${t.phone}')">Delete</button>
+      ${!t.resigned ? `<button class="resign-btn" onclick="resignTrainer('${t.phone}')">Resign</button>` : ''}
+    `;
+    listDiv.appendChild(card);
+  });
+}
+
+function openOverlay(src) {
+  document.getElementById('overlayImg').src = src;
+  document.getElementById('photoOverlay').style.display = 'flex';
+}
+function closeOverlay() {
+  document.getElementById('photoOverlay').style.display = 'none';
+}
+
+document.getElementById('trainerPhoto').addEventListener('change', function () {
+  const file = this.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      localStorage.setItem('capturedTrainerPhoto', e.target.result);
+      document.getElementById('photoStatus').innerText = 'Photo attached ✅';
+    };
+    reader.readAsDataURL(file);
+  }
+});
+</script>
+
+<!-- HTML content continues here: header, add form, list area -->
+<div class="header">
+  <h1>Trainers - AR Fitness</h1>
+  <div>
+    <button onclick="goBack()">Back</button>
+    <button onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<div class="add-trainer">
+  <button onclick="toggleAddForm()">ADD</button>
+  <div id="addForm" class="add-form" style="display:none; margin-top: 20px;">
+    <input type="text" id="trainerName" placeholder="Name" required />
+    <input type="text" id="trainerPhone" placeholder="Phone" required />
+    <input type="file" id="trainerPhoto" accept="image/*" capture="environment" style="display:none;" />
+    <button type="button" onclick="document.getElementById('trainerPhoto').click()">Capture Photo</button>
+    <span id="photoStatus" style="margin-left:10px;"></span>
+    <input type="text" id="trainerAdhar" placeholder="Aadhar Number" required />
+    <input type="text" id="trainerBank" placeholder="Bank Account Number or UPI ID" required />
+    <button onclick="addTrainer()">Add Trainer</button>
+  </div>
+</div>
+
+<div id="trainerSummary" style="margin: 20px 0; color: #333; font-weight: bold;"></div>
+<div class="trainer-list" id="trainerList"></div>
+
+<div id="photoOverlay" onclick="closeOverlay()">
+  <img id="overlayImg" src="" alt="Trainer Photo" />
+</div>
+
+</body>
+</html>

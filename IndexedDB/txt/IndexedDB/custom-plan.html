@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Custom Plan Members</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .member-list {
+      margin-top: 20px;
+    }
+    .member-item {
+      background: white;
+      margin-bottom: 15px;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .member-item img {
+      max-width: 60px;
+      max-height: 60px;
+      border-radius: 8px;
+      float: right;
+    }
+    .back-button {
+      display: inline-block;
+      margin-bottom: 20px;
+      background: #ff3c3c;
+      color: white;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<button class="back-button" onclick="history.back()">← Back</button>
+<h1 id="title">Custom Plan Members</h1>
+
+<div class="member-list" id="memberList"></div>
+
+<script>
+  let db;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open("ARFitnessDB", 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function loadMembers() {
+    const plan = JSON.parse(localStorage.getItem("selectedPlan"));
+    if (!plan) {
+      document.getElementById("title").textContent = "No Plan Selected";
+      return;
+    }
+
+    document.getElementById("title").textContent = `Plan: ${plan.name} (${plan.months} months)`;
+
+    db = await openDB();
+
+    const tx = db.transaction("members", "readonly");
+    const store = tx.objectStore("members");
+    const request = store.getAll();
+
+    request.onsuccess = function () {
+      const members = request.result.filter(m => m.planName === plan.name && parseInt(m.plan) === plan.months);
+      displayMembers(members);
+    };
+  }
+
+  function displayMembers(members) {
+    const list = document.getElementById("memberList");
+    list.innerHTML = "";
+
+    if (members.length === 0) {
+      list.innerHTML = "<p>No members enrolled in this plan.</p>";
+      return;
+    }
+
+    members.forEach(m => {
+      const div = document.createElement("div");
+      div.className = "member-item";
+      div.innerHTML = `
+        <strong>Name:</strong> ${m.name}<br>
+        <strong>Phone:</strong> ${m.phone}<br>
+        <strong>Start:</strong> ${m.start}<br>
+        <strong>End:</strong> ${m.end}
+        ${m.photo ? `<img src="${m.photo}" alt="photo">` : ""}
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  loadMembers();
+</script>
+
+</body>
+</html>

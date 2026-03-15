@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Today's Collection - AR Fitness</title>
+  <link rel="icon" href="favicon.png" type="image/png" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+
+    .back-button {
+      padding: 10px 20px;
+      background-color: #ff3c3c;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .back-button:hover {
+      background-color: #e60000;
+    }
+
+    .collection-card {
+      background: #313131;
+      border: 1px solid #ddd;
+      padding: 20px;
+      width: 200px;
+      border-radius: 10px;
+      text-align: center;
+      color: white;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    .collection-card img {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      cursor: pointer;
+      display: block;
+      margin: 0 auto 10px;
+    }
+
+    .collection-card strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .collection-card p {
+      margin: 5px 0;
+      color: #fff;
+    }
+
+    #photoDialog {
+      border: none;
+      padding: 0;
+      max-width: 90%;
+      max-height: 90%;
+    }
+
+    #photoDialog::backdrop {
+      background: rgba(0, 0, 0, 0.9);
+    }
+
+    .total-box {
+      background-color: #333;
+      color: white;
+      text-align: center;
+      padding: 15px;
+      font-size: 22px;
+      font-weight: bold;
+      border-radius: 10px;
+      margin: 20px auto;
+      width: 320px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+
+<button class="back-button" onclick="window.location.href='home.html'">Home</button>
+<h1>Today's Collection</h1>
+
+<div id="totalBox" class="total-box">₹ 0 Collected Today</div>
+
+<div id="todaysCollectionList" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;"></div>
+
+<!-- Fullscreen Photo Dialog -->
+<dialog id="photoDialog">
+  <span onclick="closePhotoDialog()" style="
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 30px;
+    color: white;
+    cursor: pointer;
+  ">&times;</span>
+  <img id="dialogImg" src="" alt="Member Photo" style="max-width: 90vw; max-height: 90vh; border-radius: 10px;" />
+</dialog>
+
+<script>
+  const DB_NAME = 'ARFitnessDB';
+  const STORE_NAME = 'members';
+
+  // Open database
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'phone' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Fetch all members
+  async function getAllMembers() {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return new Promise((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Check if renewed today
+  function isRenewedToday(historyEntry) {
+    if (!historyEntry || !historyEntry.renewedOn) return false;
+    const renewedOn = new Date(historyEntry.renewedOn);
+    const today = new Date();
+    return (
+      renewedOn.getDate() === today.getDate() &&
+      renewedOn.getMonth() === today.getMonth() &&
+      renewedOn.getFullYear() === today.getFullYear()
+    );
+  }
+
+  // Check if added today
+  function isAddedToday(member) {
+    const startDate = new Date(member.start);
+    const today = new Date();
+    return (
+      startDate.getDate() === today.getDate() &&
+      startDate.getMonth() === today.getMonth() &&
+      startDate.getFullYear() === today.getFullYear()
+    );
+  }
+
+  // Default plan rates
+  const planRates = {
+    "1 Month": 1000,
+    "3 Months": 2500,
+    "6 Months": 4500,
+    "7 Months": 5000,
+    "12 Months": 8000,
+    "1 Year": 8000
+  };
+
+  // Get plan amount automatically
+  function getPlanAmount(plan) {
+    const match = plan.match(/₹\s*([0-9]+)/);
+    if (match) return parseInt(match[1]);
+    for (const key in planRates) {
+      if (plan.toLowerCase().includes(key.toLowerCase())) {
+        return planRates[key];
+      }
+    }
+    return 0;
+  }
+
+  async function loadTodaysCollection() {
+    const members = await getAllMembers();
+    const today = new Date();
+
+    let todaysMembers = [];
+    let totalAmount = 0;
+
+    members.forEach(member => {
+      const history = member.history || [];
+      const lastRenewal = history[history.length - 1];
+
+      if (isAddedToday(member) || isRenewedToday(lastRenewal)) {
+        todaysMembers.push(member);
+        totalAmount += getPlanAmount(member.plan);
+      }
+    });
+
+    const container = document.getElementById('todaysCollectionList');
+    const totalBox = document.getElementById('totalBox');
+    const dialog = document.getElementById('photoDialog');
+    const dialogImg = document.getElementById('dialogImg');
+
+    if (todaysMembers.length === 0) {
+      container.innerHTML = "<p style='text-align:center;'>No collections recorded today.</p>";
+      totalBox.textContent = "₹ 0 Collected Today";
+      return;
+    }
+
+    container.innerHTML = "";
+    totalBox.textContent = `₹ ${totalAmount.toLocaleString()} Collected Today`;
+
+    todaysMembers.forEach(member => {
+      const div = document.createElement('div');
+      div.className = 'collection-card';
+
+      const photo = document.createElement('img');
+      photo.src = member.photo || '';
+      photo.alt = `${member.name}'s Photo`;
+      photo.onclick = () => {
+        dialogImg.src = member.photo || '';
+        dialog.showModal();
+      };
+
+      div.appendChild(photo);
+      div.innerHTML += `
+        <strong>${member.name}</strong>
+        <p>Phone: ${member.phone}</p>
+        <p>Plan: ${member.plan}</p>
+        <p>Start: ${member.start}</p>
+        <p>End: ${member.end}</p>
+        <p><b>${isAddedToday(member) ? "New Member" : "Renewed Today"}</b></p>
+      `;
+
+      container.appendChild(div);
+    });
+  }
+
+  function closePhotoDialog() {
+    document.getElementById('photoDialog').close();
+  }
+
+  window.onload = loadTodaysCollection;
+</script>
+
+</body>
+</html>

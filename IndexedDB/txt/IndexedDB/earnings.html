@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AR Fitness Earnings</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      background-position: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 {
+      margin: 0;
+      color: #333;
+    }
+    .header button {
+      padding: 8px 16px;
+      background: #ff3c3c;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .earnings-section {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    .earnings-item {
+      padding: 10px 0;
+      border-bottom: 1px solid #ddd;
+    }
+    .earnings-item:last-child {
+      border-bottom: none;
+    }
+    #yearTabs button {
+      margin-right: 8px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<script>
+  if (localStorage.getItem("loggedIn") !== "true") {
+    window.location.href = "login.html";
+  }
+</script>
+
+<div class="header">
+  <h1>Earnings Overview</h1>
+  <div>
+    <button onclick="goBack()" style="margin-right: 10px;">Back</button>
+  </div>
+</div>
+
+<div class="earnings-section">
+  <h2>Today's Earnings: ₹<span id="dailyEarnings">0</span></h2>
+  <h2>This Week's Earnings: ₹<span id="weeklyEarnings">0</span></h2>
+  <h2>This Month's Earnings: ₹<span id="monthlyEarnings">0</span></h2>
+</div>
+
+<div class="earnings-section">
+  <h2>Monthly Earnings</h2>
+  <div id="yearTabs" style="margin-bottom: 10px;"></div>
+  <div id="monthlyBreakdown"></div>
+</div>
+
+<div class="earnings-section">
+  <h2>Total Earnings This Year: ₹<span id="yearlyEarnings">0</span></h2>
+</div>
+
+<div class="earnings-section">
+  <h2>Yearly Earnings Summary</h2>
+  <div id="yearlyEarningsSummary"></div>
+  <canvas id="earningsChart" style="margin-top: 20px; max-width: 100%;"></canvas>
+  <div style="margin-top: 10px;">
+    <label for="chartType">Chart Type: </label>
+    <select id="chartType" onchange="updateChartType(this.value)">
+      <option value="bar" selected>Bar</option>
+      <option value="line">Line</option>
+    </select>
+  </div>
+</div>
+
+<script>
+  const DB_NAME = 'ARFitnessDB';
+  const MEMBER_STORE = 'members';
+
+  function goBack() {
+    window.location.href = "home.html";
+  }
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = function (e) {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(MEMBER_STORE)) {
+          db.createObjectStore(MEMBER_STORE, { keyPath: "phone" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function getAllMembers() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMBER_STORE, "readonly");
+      const store = tx.objectStore(MEMBER_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function calculateSummary(members, currentDate = new Date()) {
+    let dailyTotal = 0, weeklyTotal = 0, monthlyTotal = 0, yearlyTotal = 0;
+    const thisYear = currentDate.getFullYear();
+
+    members.forEach(m => {
+      const startDate = new Date(m.start);
+      const fee = parseInt(m.plan) || 0;
+
+      if (startDate.getFullYear() === thisYear) {
+        yearlyTotal += fee;
+        const diffTime = currentDate - startDate;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) dailyTotal += fee;
+        if (diffDays >= 0 && diffDays < 7) weeklyTotal += fee;
+        if (startDate.getMonth() === currentDate.getMonth()) monthlyTotal += fee;
+      }
+    });
+
+    document.getElementById("dailyEarnings").innerText = dailyTotal;
+    document.getElementById("weeklyEarnings").innerText = weeklyTotal;
+    document.getElementById("monthlyEarnings").innerText = monthlyTotal;
+    document.getElementById("yearlyEarnings").innerText = yearlyTotal;
+  }
+
+  function renderYearTabs(years, onSelectYear, selectedYear) {
+    const container = document.getElementById("yearTabs");
+    container.innerHTML = "";
+    years.sort((a, b) => b - a).forEach(year => {
+      const btn = document.createElement("button");
+      btn.textContent = year;
+      btn.style.backgroundColor = year === selectedYear ? "#ff3c3c" : "#ddd";
+      btn.style.color = year === selectedYear ? "white" : "black";
+      btn.onclick = () => onSelectYear(year);
+      container.appendChild(btn);
+    });
+  }
+
+  function renderMonthlyBreakdown(members, year) {
+    const monthlyTotals = Array(12).fill(0);
+    members.forEach(m => {
+      const date = new Date(m.start);
+      const fee = parseInt(m.plan) || 0;
+      if (date.getFullYear() === year) {
+        monthlyTotals[date.getMonth()] += fee;
+      }
+    });
+
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    const breakdownDiv = document.getElementById("monthlyBreakdown");
+    breakdownDiv.innerHTML = "";
+    monthNames.forEach((month, i) => {
+      const div = document.createElement("div");
+      div.className = "earnings-item";
+      div.innerHTML = `${month}: ₹${monthlyTotals[i]}`;
+      breakdownDiv.appendChild(div);
+    });
+  }
+
+  function renderYearlySummary(members) {
+    const yearlyMap = new Map();
+
+    members.forEach(m => {
+      const year = new Date(m.start).getFullYear();
+      const fee = parseInt(m.plan) || 0;
+      yearlyMap.set(year, (yearlyMap.get(year) || 0) + fee);
+    });
+
+    const sortedYears = Array.from(yearlyMap.keys()).sort((a, b) => a - b);
+
+    const container = document.getElementById("yearlyEarningsSummary");
+    container.innerHTML = "";
+    sortedYears.forEach(year => {
+      const div = document.createElement("div");
+      div.className = "earnings-item";
+      div.textContent = `${year}: ₹${yearlyMap.get(year)}`;
+      container.appendChild(div);
+    });
+
+    renderChart(sortedYears, sortedYears.map(y => yearlyMap.get(y)));
+  }
+
+  let earningsChartInstance = null;
+  let currentChartData = { labels: [], data: [] };
+
+  function renderChart(labels, data, type = "bar") {
+    const ctx = document.getElementById("earningsChart").getContext("2d");
+    currentChartData = { labels, data };
+
+    if (earningsChartInstance) {
+      earningsChartInstance.destroy();
+    }
+
+    earningsChartInstance = new Chart(ctx, {
+      type: type,
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Total Earnings per Year (₹)',
+          data: data,
+          backgroundColor: type === 'bar' ? '#ff3c3c' : 'rgba(255, 60, 60, 0.4)',
+          borderColor: '#ff3c3c',
+          borderWidth: 2,
+          tension: 0.3,
+          fill: type === 'line'
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          tooltip: {
+            mode: 'index',
+            intersect: false
+          },
+          legend: {
+            display: true
+          }
+        },
+        interaction: {
+          mode: 'nearest',
+          axis: 'x',
+          intersect: false
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: value => `₹${value}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function updateChartType(newType) {
+    renderChart(currentChartData.labels, currentChartData.data, newType);
+  }
+
+  async function initEarnings() {
+    const members = await getAllMembers();
+    const years = [...new Set(members.map(m => new Date(m.start).getFullYear()))];
+    const currentYear = new Date().getFullYear();
+
+    function handleYearSelect(year) {
+      renderYearTabs(years, handleYearSelect, year);
+      renderMonthlyBreakdown(members, year);
+    }
+
+    calculateSummary(members);
+    handleYearSelect(currentYear);
+    renderYearlySummary(members);
+  }
+
+  initEarnings();
+</script>
+
+</body>
+</html>

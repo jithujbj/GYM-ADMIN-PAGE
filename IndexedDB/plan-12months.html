@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>12 Months Plan Members - AR Fitness</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      background-position: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      color: #333;
+    }
+
+    .header button {
+      padding: 8px 16px;
+      background: #ff3c3c;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background-color: white;
+    }
+
+    th, td {
+      padding: 12px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+
+    th {
+      background-color: #333;
+      color: white;
+    }
+
+    img {
+      max-width: 80px;
+      height: auto;
+      cursor: pointer;
+    }
+
+    #photoModal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      justify-content: center;
+      align-items: center;
+    }
+
+    #photoModal img {
+      max-width: 90%;
+      max-height: 90%;
+    }
+
+    #photoModal span {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 30px;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+  <script>
+    if (localStorage.getItem("loggedIn") !== "true") {
+      window.location.href = "login.html";
+    }
+  </script>
+</head>
+<body>
+
+<div class="header">
+  <h1>12 Months Plan Members</h1>
+  <button onclick="goBack()">Back</button>
+</div>
+
+<div id="memberList"></div>
+
+<!-- Fullscreen Modal -->
+<div id="photoModal">
+  <span onclick="closeModal()">&times;</span>
+  <img id="fullPhoto" />
+</div>
+
+<script>
+  const DB_NAME = 'ARFitnessDB';
+  const STORE_NAME = 'members';
+
+  let allFilteredMembers = [];
+  let currentPage = 1;
+  const pageSize = 25;
+
+  function goBack() {
+    window.location.href = "home.html";
+  }
+
+  function monthsBetween(start, end) {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    return (
+      (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+      (endDate.getMonth() - startDate.getMonth())
+    );
+  }
+
+  function showFullScreen(src) {
+    const modal = document.getElementById("photoModal");
+    const img = document.getElementById("fullPhoto");
+    img.src = src;
+    modal.style.display = "flex";
+  }
+
+  function closeModal() {
+    document.getElementById("photoModal").style.display = "none";
+  }
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = function (e) {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'phone' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function getAllMembers() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function fetchMembers() {
+    const members = await getAllMembers();
+    allFilteredMembers = members.filter(m => monthsBetween(m.start, m.end) === 12);
+    currentPage = 1;
+    renderMembers();
+  }
+
+  function renderMembers() {
+    const container = document.getElementById('memberList');
+
+    if (allFilteredMembers.length === 0) {
+      container.innerHTML = "<p>No members found for 12-months plan.</p>";
+      return;
+    }
+
+    const start = (currentPage - 1) * pageSize;
+    const paginated = allFilteredMembers.slice(start, start + pageSize);
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Photo</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Plan</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    paginated.forEach(member => {
+      html += `
+        <tr>
+          <td>
+            ${member.photo ? `<img src="${member.photo}" onclick="showFullScreen('${member.photo}')" />` : 'N/A'}
+          </td>
+          <td>${member.name || ''}</td>
+          <td>${member.phone || ''}</td>
+          <td>${member.plan || ''}</td>
+          <td>${member.start || ''}</td>
+          <td>${member.end || ''}</td>
+          
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table>`;
+
+    const totalPages = Math.ceil(allFilteredMembers.length / pageSize);
+    html += `
+      <div style="text-align:center; margin-top: 15px;">
+        <button onclick="prevPage()" ${currentPage === 1 ? 'disabled' : ''}>&laquo; Prev</button>
+        <span style="margin: 0 15px;">Page ${currentPage} of ${totalPages}</span>
+        <button onclick="nextPage()" ${currentPage === totalPages ? 'disabled' : ''}>Next &raquo;</button>
+      </div>
+    `;
+
+    container.innerHTML = html;
+  }
+
+  function nextPage() {
+    const totalPages = Math.ceil(allFilteredMembers.length / pageSize);
+    if (currentPage < totalPages) {
+      currentPage++;
+      renderMembers();
+    }
+  }
+
+  function prevPage() {
+    if (currentPage > 1) {
+      currentPage--;
+      renderMembers();
+    }
+  }
+
+  window.onload = fetchMembers;
+</script>
+
+</body>
+</html>

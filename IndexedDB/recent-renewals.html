@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Recent Renewals</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      background-position: center;
+      margin: 0;
+    }
+    h1 {
+      color: #333;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .back-button {
+      padding: 10px 20px;
+      background-color: #ff3c3c;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .back-button:hover {
+      background-color: #e60000;
+    }
+    .renewal {
+  background: #313131;
+  border: 1px solid #ddd;
+  padding: 20px;
+  width: 200px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+
+    .member-photo {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      cursor: pointer;
+      display: block;
+      margin: 0 auto 10px;
+    }
+    .renewal strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+    .renewal p {
+      margin: 5px 0;
+      color: #ffffff;
+    }
+    #photoDialog {
+      border: none;
+      padding: 0;
+      max-width: 90%;
+      max-height: 90%;
+    }
+    #photoDialog img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+    }
+    #photoDialog::backdrop {
+      background: rgba(0, 0, 0, 0.9);
+    }
+  </style>
+</head>
+<body>
+
+<button class="back-button" onclick="window.location.href='home.html'">Home</button>
+<h1>Recent Renewals</h1>
+
+<div id="recentRenewalsList" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;"></div>
+
+
+<div id="photoDialog" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; z-index: 1000;">
+  <span onclick="closePhotoDialog()" style="
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 30px;
+    color: white;
+    cursor: pointer;
+    z-index: 1001;
+  ">&times;</span>
+  <img id="dialogImg" src="" alt="Member Photo" style="max-width: 90vw; max-height: 90vh; border-radius: 10px;" />
+</div>
+
+
+
+<script>
+  const DB_NAME = 'ARFitnessDB';
+  const STORE_NAME = 'members';
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'phone' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function getAllMembers() {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return new Promise((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function isRenewedThisWeek(historyEntry) {
+    const renewedOn = new Date(historyEntry.renewedOn);
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    return renewedOn >= startOfWeek && renewedOn <= endOfWeek;
+  }
+ function closePhotoDialog() {
+  document.getElementById('photoDialog').style.display = 'none';
+}
+
+
+
+  async function loadRecentRenewals() {
+    const members = await getAllMembers();
+    const recentRenewals = members.filter(member => {
+      const history = member.history || [];
+      const lastRenewal = history[history.length - 1];
+      if (!lastRenewal || !lastRenewal.renewedOn) return false;
+      const wasPreviouslyExpired = new Date(lastRenewal.previousEnd) < new Date(lastRenewal.renewedOn);
+      return wasPreviouslyExpired && isRenewedThisWeek(lastRenewal);
+    });
+
+    const container = document.getElementById('recentRenewalsList');
+    const dialog = document.getElementById('photoDialog');
+    const dialogImg = document.getElementById('dialogImg');
+
+    if (recentRenewals.length === 0) {
+      container.innerHTML = "<p style='text-align:center;'>No renewals from expired members this week.</p>";
+      return;
+    }
+    
+
+    container.innerHTML = "";
+    recentRenewals.forEach(member => {
+      const div = document.createElement('div');
+      div.className = 'renewal';
+
+      const photo = document.createElement('img');
+      photo.src = member.photo || '';
+      photo.alt = `${member.name}'s Photo`;
+      photo.className = 'member-photo';
+      photo.onclick = () => {
+        dialogImg.src = member.photo || '';
+        dialog.style.display = 'flex';
+
+      };
+
+      const name = `<strong>${member.name}</strong>`;
+      const phone = `<p>Phone: ${member.phone}</p>`;
+      const plan = `<p>Plan: ${member.plan}</p>`;
+      const start = `<p>Start: ${member.start}</p>`;
+      const end = `<p>End: ${member.end}</p>`;
+
+      div.appendChild(photo);
+      div.innerHTML += name + phone + plan + start + end;
+
+      container.appendChild(div);
+    });
+  }
+
+  window.onload = loadRecentRenewals;
+</script>
+
+</body>
+</html>  

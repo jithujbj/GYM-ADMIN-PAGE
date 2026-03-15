@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Recent Renewals</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      background-position: center;
+      margin: 0;
+    }
+    h1 {
+      color: #333;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .back-button {
+      padding: 10px 20px;
+      background-color: #ff3c3c;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .back-button:hover {
+      background-color: #e60000;
+    }
+    .renewal {
+      background: #313131;
+      border: 1px solid #ddd;
+      padding: 20px;
+      margin: 20px auto;
+      border-radius: 10px;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .member-photo {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      cursor: pointer;
+      display: block;
+      margin: 0 auto 10px;
+    }
+    .renewal strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+    .renewal p {
+      margin: 5px 0;
+      color: #ffffff;
+    }
+    #photoDialog {
+      border: none;
+      padding: 0;
+      max-width: 90%;
+      max-height: 90%;
+    }
+    #photoDialog img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+    }
+    #photoDialog::backdrop {
+      background: rgba(0, 0, 0, 0.8);
+    }
+  </style>
+</head>
+<body>
+
+<button class="back-button" onclick="window.location.href='home.html'">Home</button>
+<h1>Recent Renewals</h1>
+
+<div id="recentRenewalsList"></div>
+
+<dialog id="photoDialog" onclick="this.close()">
+  <img id="dialogImg" src="" alt="Member Photo" />
+</dialog>
+
+<script>
+  const DB_NAME = 'ARFitnessDB';
+  const STORE_NAME = 'members';
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = function (e) {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'phone' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function getAllMembers() {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return new Promise((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function loadRecentRenewals() {
+    const members = await getAllMembers();
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    const recentRenewals = members.filter(member => {
+      if (!Array.isArray(member.history) || member.history.length === 0) return false;
+      const lastRenewal = member.history[member.history.length - 1];
+      const renewedOn = new Date(lastRenewal.renewedOn);
+      const wasExpired = new Date(lastRenewal.previousEnd) < renewedOn;
+      const renewedThisWeek = renewedOn >= startOfWeek && renewedOn <= endOfWeek;
+      return wasExpired && renewedThisWeek;
+    });
+
+    const container = document.getElementById('recentRenewalsList');
+    const dialog = document.getElementById('photoDialog');
+    const dialogImg = document.getElementById('dialogImg');
+
+    if (recentRenewals.length === 0) {
+      container.innerHTML = "<p style='text-align:center;'>No renewals this week from expired members.</p>";
+    } else {
+      container.innerHTML = "";
+      recentRenewals.forEach(member => {
+        const div = document.createElement('div');
+        div.className = 'renewal';
+
+        const photo = document.createElement('img');
+        photo.src = member.photo;
+        photo.alt = `${member.name}'s Photo`;
+        photo.className = 'member-photo';
+        photo.onclick = () => {
+          dialogImg.src = member.photo;
+          dialog.showModal();
+        };
+        div.appendChild(photo);
+
+        const name = document.createElement('strong');
+        name.textContent = member.name;
+        div.appendChild(name);
+
+        const phone = document.createElement('p');
+        phone.textContent = `Phone: ${member.phone}`;
+        div.appendChild(phone);
+
+        const plan = document.createElement('p');
+        plan.textContent = `Plan: ${member.plan}`;
+        div.appendChild(plan);
+
+        const start = document.createElement('p');
+        start.textContent = `Start: ${member.start}`;
+        div.appendChild(start);
+
+        const end = document.createElement('p');
+        end.textContent = `End: ${member.end}`;
+        div.appendChild(end);
+
+        container.appendChild(div);
+      });
+    }
+  }
+
+  window.onload = loadRecentRenewals;
+</script>
+
+</body>
+</html>

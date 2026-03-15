@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Total Members - AR Fitness</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5 url('ARfitnesslogo1.png') no-repeat center center fixed;
+      background-size: 1000px;
+      background-position: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+
+    .back-btn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 8px 14px;
+      background: #ff0000;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+    }
+
+    .search-container {
+      text-align: left;
+      margin-bottom: 20px;
+    }
+
+    #searchInput {
+      width: 300px;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+
+    th {
+      background-color: #333;
+      color: white;
+      cursor: pointer;
+    }
+
+    .expired {
+      background-color: #dd4343 !important;
+    }
+
+    .renew-count {
+      color: blue;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    input, button {
+      font-size: 14px;
+    }
+
+    button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .modal-buttons {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .modal-buttons button {
+      flex: 1;
+      margin: 0 5px;
+    }
+
+    #passwordModal, #renewModal, #renewalModal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgb(255, 255, 255);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    #renewalModal ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    #photoModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.9);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #photoModal img {
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 10px;
+    }
+
+    .closeBtn {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 30px;
+      color: white;
+      cursor: pointer;
+    }
+    .edit-btn {
+  background-color: #555;
+  color: rgb(99, 98, 98);
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.delete-btn {
+  background-color: #28a745;
+  color: rgb(255, 0, 0);
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+  </style>
+</head>
+<body>
+
+<a href="home.html" class="back-btn">Home</a>
+
+<h1>Total Members</h1>
+
+<div class="search-container">
+  <input type="text" id="searchInput" placeholder="Search by name or phone" onkeyup="resetAndRender()" />
+
+</div>
+<div id="pagination" style="margin-top: 20px; text-align: center;">
+  <button onclick="prevPage()" id="prevBtn" disabled>&laquo; Prev</button>
+  <span id="pageInfo" style="margin: 0 10px;"></span>
+  <button onclick="nextPage()" id="nextBtn">Next &raquo;</button>
+</div>
+
+<table id="totalMembersTable">
+  <thead>
+    <tr>
+      <th>Photo</th>
+      <th onclick="sortBy('name')">Name</th>
+      <th onclick="sortBy('phone')">Phone</th>
+      <th onclick="sortBy('plan')">Plan</th>
+      <th>Start Date</th>
+      <th>End Date</th>
+      <th>Renewed</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<div id="pagination" style="margin-top: 20px; text-align: center;">
+  <button onclick="prevPage()" id="prevBtn" disabled>&laquo; Prev</button>
+  <span id="pageInfo" style="margin: 0 10px;"></span>
+  <button onclick="nextPage()" id="nextBtn">Next &raquo;</button>
+</div>
+
+
+<!-- Password Modal -->
+<div id="passwordModal">
+  <h3>Enter Password</h3>
+  <input type="password" id="passwordInput" placeholder="Password" />
+  <div class="modal-buttons">
+    <button onclick="submitPassword()">Submit</button>
+    <button onclick="closePasswordModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Renew Modal -->
+<div id="renewModal">
+  <h3>Renew Membership</h3>
+  <input type="number" id="renewMonthsInput" placeholder="Months to add" />
+  <div class="modal-buttons">
+    <button onclick="submitRenew()">Renew</button>
+    <button onclick="closeRenewModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Renewal History Modal -->
+<div id="renewalModal">
+  <h3>Renewal History</h3>
+  <ul id="renewalList"></ul>
+  <button onclick="document.getElementById('renewalModal').style.display='none'" style="margin-top:10px; background:#ff0000; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Close</button>
+</div>
+
+<!-- Fullscreen Photo Modal -->
+<div id="photoModal">
+  <span class="closeBtn" onclick="document.getElementById('photoModal').style.display='none'">&times;</span>
+  <img id="modalImage" src="" alt="Full Photo">
+</div>
+
+<div id="editModal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.5); z-index: 2000;">
+  <h3>Edit Member</h3>
+  <form id="editForm">
+    <input type="text" id="editName" placeholder="Name" required><br><br>
+    <input type="tel" id="editPhone" placeholder="Phone Number" required disabled><br><br>
+    <input type="text" id="editPlan" placeholder="Plan" required><br><br>
+    <input type="date" id="editStart" placeholder="Start Date" required><br><br>
+    <input type="date" id="editEnd" placeholder="End Date" required><br><br>
+    <select id="editGender" required>
+      <option value="">Select Gender</option>
+      <option value="Male">Male</option>
+      <option value="Female">Female</option>
+      <option value="Other">Other</option>
+    </select><br><br>
+    <button type="submit">Submit</button>
+    <button type="button" onclick="closeEditModal()">Cancel</button>
+  </form>
+</div>
+
+<script>
+  let db;
+  let members = [];
+  let currentSort = { field: '', ascending: true };
+  let pendingDeleteIndex = null;
+  let pendingRenewIndex = null;
+  let editingIndex = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("ARFitnessDB", 1);
+
+      request.onupgradeneeded = function (e) {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains("members")) {
+          const store = db.createObjectStore("members", { keyPath: "phone" });
+          store.createIndex("name", "name", { unique: false });
+        }
+      };
+
+      request.onsuccess = function (e) {
+        db = e.target.result;
+        resolve(db);
+      };
+
+      request.onerror = function () {
+        reject("Failed to open DB");
+      };
+    });
+  }
+
+  async function fetchMembers() {
+    const tx = db.transaction("members", "readonly");
+    const store = tx.objectStore("members");
+    const request = store.getAll();
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject("Failed to fetch members");
+    });
+  }
+
+  function updateMember(member) {
+    const tx = db.transaction("members", "readwrite");
+    const store = tx.objectStore("members");
+    store.put(member);
+  }
+
+  function deleteMember(phone) {
+    const tx = db.transaction("members", "readwrite");
+    const store = tx.objectStore("members");
+    store.delete(phone);
+  }
+
+  function renderTotalMembers() {
+    const tbody = document.querySelector("#totalMembersTable tbody");
+    const searchTerm = document.getElementById("searchInput").value.toLowerCase();
+    tbody.innerHTML = "";
+
+    let filtered = members.filter(m =>
+      m.name.toLowerCase().includes(searchTerm) ||
+      m.phone.toLowerCase().includes(searchTerm)
+    );
+
+    if (currentSort.field) {
+      filtered.sort((a, b) => {
+        let valA = a[currentSort.field]?.toLowerCase?.() || '';
+        let valB = b[currentSort.field]?.toLowerCase?.() || '';
+        return currentSort.ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      });
+    }
+
+    filtered.forEach((m, i) => {
+      const renewCount = m.renewCount || 0;
+      const history = m.history || [];
+      const photoCell = m.photo 
+        ? `<img src="${m.photo}" width="80" style="cursor:pointer; border-radius:5px;" onclick="showFullScreen('${m.photo}')">`
+        : "—";
+
+      const renewDisplay = renewCount > 0
+        ? `<span class="renew-count" onclick="showHistory(${i})">${renewCount} time${renewCount > 1 ? 's' : ''}</span>`
+        : "0";
+
+      const today = new Date();
+      const endDate = new Date(m.end);
+      const isExpired = endDate < today;
+
+      const rowClass = isExpired ? 'expired' : '';
+      const renewButton = "";
+
+      tbody.innerHTML += `
+        <tr class="${rowClass}">
+          <td>${photoCell}</td>
+          <td>${m.name}</td>
+          <td>${m.phone}</td>
+          <td>${m.plan}</td>
+          <td>${m.start}</td>
+          <td>${m.end}</td>
+          <td>${renewDisplay}</td>
+          <td>
+            <button onclick="openPasswordModal(${i})">Delete</button>
+            ${renewButton}
+          </td>
+        </tr>`;
+    });
+  }
+
+  function sortBy(field) {
+    if (currentSort.field === field) {
+      currentSort.ascending = !currentSort.ascending;
+    } else {
+      currentSort.field = field;
+      currentSort.ascending = true;
+    }
+    renderTotalMembers();
+  }
+
+  function showFullScreen(src) {
+    document.getElementById("modalImage").src = src;
+    document.getElementById("photoModal").style.display = "flex";
+  }
+
+  function openPasswordModal(index) {
+    pendingDeleteIndex = index;
+    document.getElementById("passwordModal").style.display = "block";
+  }
+
+  function closePasswordModal() {
+    document.getElementById("passwordModal").style.display = "none";
+    document.getElementById("passwordInput").value = '';
+    pendingDeleteIndex = null;
+  }
+
+  function submitPassword() {
+    const input = document.getElementById("passwordInput").value;
+    if (input === "8217526578") {
+      const phone = members[pendingDeleteIndex].phone;
+      deleteMember(phone);
+      members.splice(pendingDeleteIndex, 1);
+      renderTotalMembers();
+      closePasswordModal();
+    } else {
+      alert("Incorrect password.");
+    }
+  }
+
+  function openRenewModal(index) {
+    pendingRenewIndex = index;
+    document.getElementById("renewModal").style.display = "block";
+  }
+
+  function closeRenewModal() {
+    document.getElementById("renewModal").style.display = "none";
+    document.getElementById("renewMonthsInput").value = '';
+    pendingRenewIndex = null;
+  }
+
+  function submitRenew() {
+    const months = parseInt(document.getElementById("renewMonthsInput").value);
+    if (!isNaN(months) && months > 0) {
+      const m = members[pendingRenewIndex];
+      if (!m.history) m.history = [];
+      m.history.push({ start: m.start, end: m.end });
+
+      const newStart = new Date();
+      const newEnd = new Date();
+      newEnd.setMonth(newEnd.getMonth() + months);
+
+      m.start = newStart.toISOString().split("T")[0];
+      m.end = newEnd.toISOString().split("T")[0];
+      m.renewCount = (m.renewCount || 0) + 1;
+
+      updateMember(m);
+      renderTotalMembers();
+      closeRenewModal();
+    }
+  }
+  function openEditModal(index) {
+    const m = members[index];
+    editingIndex = index;
+    document.getElementById("editName").value = m.name || '';
+    document.getElementById("editPhone").value = m.phone || '';
+    document.getElementById("editPlan").value = m.plan || '';
+    document.getElementById("editStart").value = m.start || '';
+    document.getElementById("editEnd").value = m.end || '';
+    document.getElementById("editGender").value = m.gender || '';
+    document.getElementById("editModal").style.display = 'block';
+  }
+
+  function closeEditModal() {
+    document.getElementById("editModal").style.display = 'none';
+    editingIndex = null;
+  }
+
+  document.getElementById("editForm").addEventListener("submit", function(e) {
+    e.preventDefault();
+    if (editingIndex !== null) {
+      const member = members[editingIndex];
+      member.name = document.getElementById("editName").value;
+      member.plan = document.getElementById("editPlan").value;
+      member.start = document.getElementById("editStart").value;
+      member.end = document.getElementById("editEnd").value;
+      member.gender = document.getElementById("editGender").value;
+
+      updateMember(member);
+      renderTotalMembers();
+      closeEditModal();
+    }
+  });
+  
+
+  function showHistory(index) {
+    const history = members[index].history || [];
+    const list = document.getElementById("renewalList");
+    list.innerHTML = "";
+
+    if (history.length === 0) {
+      list.innerHTML = "<li>No previous memberships found.</li>";
+    } else {
+      history.forEach((entry, idx) => {
+        const item = document.createElement("li");
+        item.textContent = `#${idx + 1}: ${entry.start} to ${entry.end}`;
+        list.appendChild(item);
+      });
+    }
+
+    document.getElementById("renewalModal").style.display = "block";
+  }
+
+  let currentPage = 1;
+const pageSize = 25;
+
+function getPaginatedMembers() {
+  const searchTerm = document.getElementById("searchInput").value.toLowerCase();
+  let filtered = members.filter(m =>
+    m.name.toLowerCase().includes(searchTerm) ||
+    m.phone.toLowerCase().includes(searchTerm)
+  );
+
+  if (currentSort.field) {
+    filtered.sort((a, b) => {
+      let valA = a[currentSort.field]?.toLowerCase?.() || '';
+      let valB = b[currentSort.field]?.toLowerCase?.() || '';
+      return currentSort.ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    });
+  }
+
+  return filtered;
+}
+
+function renderTotalMembers() {
+  const tbody = document.querySelector("#totalMembersTable tbody");
+  tbody.innerHTML = "";
+
+  const filtered = getPaginatedMembers();
+  const startIdx = (currentPage - 1) * pageSize;
+  const paginated = filtered.slice(startIdx, startIdx + pageSize);
+
+  paginated.forEach((m, i) => {
+    const renewCount = m.renewCount || 0;
+    const history = m.history || [];
+    const photoCell = m.photo 
+      ? `<img src="${m.photo}" width="80" style="cursor:pointer; border-radius:5px;" onclick="showFullScreen('${m.photo}')">`
+      : "—";
+
+    const renewDisplay = renewCount > 0
+      ? `<span class="renew-count" onclick="showHistory(${members.indexOf(m)})">${renewCount} time${renewCount > 1 ? 's' : ''}</span>`
+      : "0";
+
+    const today = new Date();
+    const endDate = new Date(m.end);
+    const isExpired = endDate < today;
+
+    const rowClass = isExpired ? 'expired' : '';
+    const renewButton = isExpired
+      ? `<button onclick="openRenewModal(${members.indexOf(m)})">Renew</button>`
+      : "";
+
+    tbody.innerHTML += `
+      <tr class="${rowClass}">
+        <td>${photoCell}</td>
+        <td>${m.name}</td>
+        <td>${m.phone}</td>
+        <td>${m.plan}</td>
+        <td>${m.start}</td>
+        <td>${m.end}</td>
+        <td>${renewDisplay}</td>
+        <td>
+  <button onclick="openPasswordModal(${members.indexOf(m)})">Delete</button>
+  <button onclick="openEditModal(${members.indexOf(m)})">Edit</button>
+  
+</td>
+</td>
+
+      </tr>`;
+  });
+
+  updatePaginationControls(filtered.length);
+}
+
+function updatePaginationControls(totalItems) {
+  const totalPages = Math.ceil(totalItems / pageSize);
+  document.getElementById("pageInfo").textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById("prevBtn").disabled = currentPage === 1;
+  document.getElementById("nextBtn").disabled = currentPage === totalPages;
+}
+
+function nextPage() {
+  const totalItems = getPaginatedMembers().length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  if (currentPage < totalPages) {
+    currentPage++;
+    renderTotalMembers();
+  }
+}
+
+function prevPage() {
+  if (currentPage > 1) {
+    currentPage--;
+    renderTotalMembers();
+  }
+}
+function resetAndRender() {
+  currentPage = 1;
+  renderTotalMembers();
+}
+
+
+
+  window.onload = async function () {
+    if (localStorage.getItem("loggedIn") !== "true") {
+      window.location.href = "login.html";
+    }
+
+    try {
+      await openDB();
+      members = await fetchMembers();
+      renderTotalMembers();
+    } catch (err) {
+      alert("Failed to load members: " + err);
+    }
+  };
+</script>
+
+
+</body>
+</html>
